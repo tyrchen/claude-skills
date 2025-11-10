@@ -1,0 +1,22 @@
+{
+  "name": "tchen-skills",
+  "owner": {
+    "name": "Tian Chen",
+    "email": "tyr.chen@gmail.com"
+  },
+  "metadata": {
+    "description": "Tian Chen custom skills",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "tchen-skills",
+      "description": "Tian Chen-specific skills",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./ai-image"
+      ]
+    }
+  ]
+}
