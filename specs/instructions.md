@@ -12,21 +12,17 @@ put the code under ./design-guide.
 
 ## build the pixel perfect design guide skill
 
-## pixel perfect design guidelines
-
 Explore claude code skill from official documentation and examples. Think ultra hard and build a claude skill under ./design-guide/SKILL.md that can generate a pixel perfect design based on a url of a website. Requirement:
 
 The skill shall:
 
-- call the script using `uv run main.py extract <url> -o /tmp/<name from url>`
-- based on the html content,css style and screenshot, generate a pixel perfect html page to mimic the original website under ./<name>-generated.html.
-- load the html page via `uv run main.py serve <path to <name>-generated.html>` and take screenshot of the page using `uv run main.py screenshot <url to <name>-generated.html> -o /tmp/<name from url>/generated.png`.
-- compare the screenshot with the original website. If the screenshot is not pixel perfect, iterate the process until it is pixel perfect.
-- Then analyze the generated html page, think ultra hard and generate a "./<xxx>-design-guide.md" file that describes the design in detail. It should include all the design thinking behind it and the color scheme, fonts, animations, etc. that others could understand and replicate the design.
+- retrieve the url and its css style
+- (if possible) call playwright mcp to take screenshot of the url (viewport size 1600x1200) and the full page screenshot.
+- based on the screenshot and css style, generate a md file design-guide.md to clearly describe the design tokens and the design principles.
+- Then try to rebuild the web page (/tmp/test.html) of the url using the design guide. Compare it with the screenshot. Iterate until it is pixel perfect to the original website.
+- Review the generated html page, think ultra hard and improve the design-guide.md file.
+- deliver the final design-guide.md file and the html page under ./design-guide/output/
 
-## extract function update
+## improve the skill
 
-Read the code under ./design-guide carefully, think ultra hard and update the extract functionality:
-
-- take screenshot of the viewport size 1200x900 of the page. Then scroll down and take another screenshot of viewport, repeat this process until the page is scrolled to the bottom.
-- extract the non repeated key html elements (e.g. navigation, hero, main content, footer, etc.), along with computed css style for each element. Store them separately in *.html (combined html and css).
+Current SKILL.md is too simple to capture the core design language of the website. Improve the skill to capture the core design language including the color scheme, fonts, animations, hover / shadow effects etc. Use playwright to play with the url and explore its UI/UX patterns that others could understand and replicate the design.
