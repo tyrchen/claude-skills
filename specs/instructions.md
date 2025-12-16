@@ -25,4 +25,4 @@ The skill shall:
 
 ## improve the skill
 
-Current SKILL.md is too simple to capture the core design language of the website. Improve the skill to capture the core design language including the color scheme, fonts, animations, hover / shadow effects etc. Use playwright to play with the url and explore its UI/UX patterns that others could understand and replicate the design.
+Current SKILL.md is too simple to capture the core design language of the website. Improve the skill to capture the core design language including the color scheme, fonts, animations, hover / shadow effects etc. Use playwright to play with the url and explore its UI/UX patterns that others could understand and replicate the design. Allow codex to have a maximum 15 minutes to complete the task. Write the complete review doc at ./specs/layer1/0002-codex-review.md
