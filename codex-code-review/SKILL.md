@@ -58,6 +58,7 @@ codex exec "Review the staged git changes. Analyze code quality, identify bugs, 
 To review uncommitted changes in the current repository:
 
 **Staged changes only:**
+
 ```bash
 codex exec "Review all staged changes (git diff --cached). For each file:
 1. Summarize what changed
@@ -70,6 +71,7 @@ Format as a structured review report."
 ```
 
 **All uncommitted changes:**
+
 ```bash
 codex exec "Review all uncommitted changes (git diff HEAD). Provide:
 - Summary of changes per file
@@ -80,6 +82,7 @@ codex exec "Review all uncommitted changes (git diff HEAD). Provide:
 ```
 
 **Changes between branches:**
+
 ```bash
 codex exec "Review changes between main and current branch (git diff main...HEAD). Focus on:
 1. Breaking changes
@@ -123,6 +126,7 @@ APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION"
 To review specific files:
 
 **Single file:**
+
 ```bash
 codex exec "Perform a comprehensive code review of src/utils/auth.ts. Analyze:
 1. Code correctness and logic
@@ -134,6 +138,7 @@ codex exec "Perform a comprehensive code review of src/utils/auth.ts. Analyze:
 ```
 
 **Multiple files:**
+
 ```bash
 codex exec "Review these files as a cohesive unit: src/api/handler.ts, src/api/middleware.ts, src/api/routes.ts. Focus on:
 - Consistency across files
@@ -255,10 +260,10 @@ Provide architectural recommendations with examples."
 
 ### Model Selection
 
-To use a specific model for deeper analysis:
+To use a specific model (if need to use the latest model - make sure do web search first to find the latest and most suitable model) for deeper analysis:
 
 ```bash
-codex exec --model o3 "Perform thorough code review of src/..."
+codex exec --model gpt-5.1-codex "Perform thorough code review of src/..."
 ```
 
 ### Reasoning Depth
@@ -266,6 +271,7 @@ codex exec --model o3 "Perform thorough code review of src/..."
 To adjust reasoning effort (available: minimal, low, medium, high, xhigh):
 
 Configure in `~/.codex/config.toml`:
+
 ```toml
 model_reasoning_effort = "high"
 ```
@@ -376,15 +382,18 @@ As a senior engineer, review this PR for merge readiness:
 ## Troubleshooting
 
 **Codex not finding files:**
+
 - Ensure running from the correct directory
 - Use absolute paths when needed
 - Check that the Git repository is initialized
 
 **Authentication issues:**
+
 - Run `codex` interactively to re-authenticate
 - Check `~/.codex/` for credential files
 
 **Timeout on large reviews:**
+
 - Break into smaller file sets
 - Use `--full-auto` for longer operations
 - Consider directory-by-directory reviews
