@@ -9,6 +9,8 @@ description: Perform comprehensive code reviews using OpenAI Codex CLI. This ski
 
 To perform thorough, automated code reviews using the OpenAI Codex CLI agent, use this skill. Codex runs locally and can analyze code changes, identify issues, suggest improvements, and provide security/performance insights through non-interactive automation.
 
+> **⚠️ CRITICAL**: When reviewing code that involves dependency versions, latest releases, or current best practices, you MUST use the WebSearch tool to verify information before making any claims. Never assume version numbers or release status - always search first to avoid false positives. See the "Web Search Verification" section for details.
+
 ## Prerequisites
 
 Ensure Codex CLI is installed and authenticated:
@@ -27,7 +29,7 @@ codex
 
 ## Decision Tree: Choosing Review Type
 
-```
+```text
 Code review request → What scope?
     ├─ Git changes (staged/unstaged) → Use: Git Diff Review
     │
@@ -43,12 +45,39 @@ Code review request → What scope?
         └─ Architecture/Design → Use: Architecture Review
 ```
 
+## Headless Execution (Required)
+
+When running codex for automated code reviews, you MUST use the `--full-auto` flag to grant all necessary permissions for headless operation. Without this flag, codex may hang waiting for user approval.
+
+**Always use `--full-auto` for non-interactive reviews:**
+
+```bash
+# CORRECT: Full automation mode - grants all permissions automatically
+codex --full-auto exec "Review the staged git changes..."
+
+# WRONG: May hang waiting for approval in automated contexts
+codex exec "Review the staged git changes..."
+```
+
+**Why this matters:**
+
+- Codex requires approval for file reads, command execution, and other operations
+- In headless/automated mode, there's no user to approve these actions
+- `--full-auto` auto-approves all safe operations, enabling true automation
+
+**Alternative: Granular approval flags:**
+
+```bash
+# Auto-approve specific operation types
+codex --auto-approve-read --auto-approve-execute exec "..."
+```
+
 ## Quick Start
 
 To perform a basic code review on staged changes:
 
 ```bash
-codex exec "Review the staged git changes. Analyze code quality, identify bugs, suggest improvements, and check for security issues. Provide a structured review with severity levels."
+codex --full-auto exec "Review the staged git changes. Analyze code quality, identify bugs, suggest improvements, and check for security issues. Provide a structured review with severity levels."
 ```
 
 ## Review Workflows
@@ -60,7 +89,7 @@ To review uncommitted changes in the current repository:
 **Staged changes only:**
 
 ```bash
-codex exec "Review all staged changes (git diff --cached). For each file:
+codex --full-auto exec "Review all staged changes (git diff --cached). For each file:
 1. Summarize what changed
 2. Identify potential bugs or logic errors
 3. Check for security vulnerabilities
@@ -73,7 +102,7 @@ Format as a structured review report."
 **All uncommitted changes:**
 
 ```bash
-codex exec "Review all uncommitted changes (git diff HEAD). Provide:
+codex --full-auto exec "Review all uncommitted changes (git diff HEAD). Provide:
 - Summary of changes per file
 - Bug identification with line numbers
 - Security concerns
@@ -84,7 +113,7 @@ codex exec "Review all uncommitted changes (git diff HEAD). Provide:
 **Changes between branches:**
 
 ```bash
-codex exec "Review changes between main and current branch (git diff main...HEAD). Focus on:
+codex --full-auto exec "Review changes between main and current branch (git diff main...HEAD). Focus on:
 1. Breaking changes
 2. API compatibility
 3. Test coverage gaps
@@ -99,8 +128,8 @@ To review a GitHub Pull Request:
 # First, fetch PR diff
 gh pr diff <PR_NUMBER> > /tmp/pr_diff.txt
 
-# Then review with codex
-codex exec "Review the code changes in /tmp/pr_diff.txt as a thorough PR reviewer. Provide:
+# Then review with codex (--full-auto for headless operation)
+codex --full-auto exec "Review the code changes in /tmp/pr_diff.txt as a thorough PR reviewer. Provide:
 
 ## Summary
 Brief description of what this PR accomplishes
@@ -128,7 +157,7 @@ To review specific files:
 **Single file:**
 
 ```bash
-codex exec "Perform a comprehensive code review of src/utils/auth.ts. Analyze:
+codex --full-auto exec "Perform a comprehensive code review of src/utils/auth.ts. Analyze:
 1. Code correctness and logic
 2. Error handling completeness
 3. Security vulnerabilities (OWASP Top 10)
@@ -140,7 +169,7 @@ codex exec "Perform a comprehensive code review of src/utils/auth.ts. Analyze:
 **Multiple files:**
 
 ```bash
-codex exec "Review these files as a cohesive unit: src/api/handler.ts, src/api/middleware.ts, src/api/routes.ts. Focus on:
+codex --full-auto exec "Review these files as a cohesive unit: src/api/handler.ts, src/api/middleware.ts, src/api/routes.ts. Focus on:
 - Consistency across files
 - Proper separation of concerns
 - Error propagation
@@ -152,7 +181,7 @@ codex exec "Review these files as a cohesive unit: src/api/handler.ts, src/api/m
 To review an entire directory or project:
 
 ```bash
-codex exec "Perform a code review of the src/services/ directory. For each file:
+codex --full-auto exec "Perform a code review of the src/services/ directory. For each file:
 - Identify the file's purpose
 - List any bugs or issues
 - Note security concerns
@@ -166,7 +195,7 @@ Provide a summary with prioritized action items."
 To perform a security-focused review:
 
 ```bash
-codex exec "Perform a security audit of the codebase. Check for:
+codex --full-auto exec "Perform a security audit of the codebase. Check for:
 
 **Critical:**
 - SQL injection vulnerabilities
@@ -201,7 +230,7 @@ Report findings with:
 To analyze code for performance issues:
 
 ```bash
-codex exec "Analyze the codebase for performance issues:
+codex --full-auto exec "Analyze the codebase for performance issues:
 
 1. **Algorithm Complexity**
    - O(n^2) or worse operations
@@ -231,7 +260,7 @@ Provide specific file locations and optimization suggestions."
 To review code architecture and design:
 
 ```bash
-codex exec "Review the codebase architecture:
+codex --full-auto exec "Review the codebase architecture:
 
 1. **Design Patterns**
    - Identify patterns in use
@@ -263,7 +292,7 @@ Provide architectural recommendations with examples."
 To use a specific model (if need to use the latest model - make sure do web search first to find the latest and most suitable model) for deeper analysis:
 
 ```bash
-codex exec --model gpt-5.1-codex "Perform thorough code review of src/..."
+codex --full-auto exec --model gpt-5.1-codex "Perform thorough code review of src/..."
 ```
 
 ### Reasoning Depth
@@ -281,7 +310,7 @@ model_reasoning_effort = "high"
 To save review results:
 
 ```bash
-codex exec -o review_report.md "Review src/api/..."
+codex --full-auto exec -o review_report.md "Review src/api/..."
 ```
 
 ### JSON Output
@@ -289,7 +318,7 @@ codex exec -o review_report.md "Review src/api/..."
 To get structured JSON output for CI integration:
 
 ```bash
-codex exec --json "Review staged changes. Return JSON with structure:
+codex --full-auto exec --json "Review staged changes. Return JSON with structure:
 {
   \"summary\": \"...\",
   \"files_reviewed\": [...],
@@ -314,8 +343,8 @@ if [ -z "$CHANGED_FILES" ]; then
     exit 0
 fi
 
-# Run codex review
-codex exec --skip-git-repo-check -o review.md "Review these changed files: $CHANGED_FILES
+# Run codex review (--full-auto required for CI/headless operation)
+codex --full-auto exec --skip-git-repo-check -o review.md "Review these changed files: $CHANGED_FILES
 
 Provide a structured review. If any critical or high severity issues are found, clearly indicate BLOCKING_ISSUES=true at the end."
 
@@ -334,7 +363,7 @@ exit 0
 
 ### Standard Review Template
 
-```
+```text
 Review the following code changes. For each issue found:
 
 1. **Location**: File path and line number
@@ -348,7 +377,7 @@ Organize by severity, starting with Critical issues.
 
 ### PR Approval Template
 
-```
+```text
 As a senior engineer, review this PR for merge readiness:
 
 ## Checklist
@@ -373,6 +402,54 @@ As a senior engineer, review this PR for merge readiness:
 - **Iterate**: Run multiple focused reviews rather than one broad review
 - **Verify**: Always verify critical security findings manually
 - **Document**: Save review outputs for future reference
+
+## CRITICAL: Web Search Verification
+
+**IMPORTANT**: Before making ANY claims about version numbers, latest releases, or current best practices, you MUST perform a web search to verify the information. This prevents false positives in reviews.
+
+### Why This Matters
+
+Code reviews often involve checking if dependencies are up-to-date or if code follows current best practices. Without verification, you may provide incorrect information. For example:
+
+- Claiming "ArgoCD latest version is 2.x" when it's actually 3.2.x (with 3.3.0 in RC)
+- Stating a library is deprecated when it's actively maintained
+- Recommending outdated security practices
+
+### When to Web Search
+
+**Always search before commenting on:**
+
+1. **Version numbers** - Latest versions of any tool, library, or framework
+2. **Deprecation status** - Whether APIs, functions, or libraries are deprecated
+3. **Security advisories** - Current CVEs or security recommendations
+4. **Best practices** - Current recommended patterns (they evolve over time)
+5. **Feature availability** - When features were introduced in specific versions
+
+### How to Verify
+
+Before finalizing any review that mentions versions or current practices:
+
+```bash
+# Use WebSearch tool to verify current information
+# Example queries:
+# - "ArgoCD latest version 2025"
+# - "React 19 release date"
+# - "Node.js LTS current version"
+# - "[library name] latest stable release"
+```
+
+### Review Output Template with Verification
+
+When your review includes version-related findings, format them as:
+
+```text
+**Dependency Check** (verified via web search on YYYY-MM-DD):
+- Package X: Using v1.2.3, latest stable is v2.0.1 ✓
+- Package Y: Using v3.0.0, this IS the latest version ✓
+- Package Z: Using v0.9.0, latest is v1.0.0 (breaking changes - review release notes)
+```
+
+**Never guess or assume version information. When in doubt, search first.**
 
 ## Reference Files
 
