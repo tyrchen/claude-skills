@@ -34,3 +34,11 @@ for codex-code-review skill, make sure it always do proper web search to avoid f
 ## build CEL skill
 
 Explore claude code skill from official documentation and examples. Think ultra hard and build a claude skill under ./cel that could write solid, high quality, production ready CEL code for kubernetes. Search and look into CEL documentation and examples to understand the CEL language and the best practices and how to write solid, high quality, production ready CEL code for kubernetes.
+
+## build KRO skill
+
+do research on RDG of KRO, and aws ACK, think ultra hard to build a skill to allow user to create RDG using pulumi typescript easily.
+
+## build surrealdb skill
+
+Explore claude code skill from official documentation and examples. Think ultra hard and build a claude skill under ./surrealdb that could write solid, high quality, production ready surrealdb queries and operations. Search and look into surrealdb documentation and examples to understand the surrealdb language and the best practices and how to write solid, high quality, production ready surrealdb queries and operations.
