@@ -1,0 +1,196 @@
+# Security Baseline ValidatingAdmissionPolicy
+# Implements essential security controls for Kubernetes workloads
+# Compatible with Kubernetes 1.30+
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: security-baseline.policies.example.com
+  labels:
+    policy.kubernetes.io/category: security
+    policy.kubernetes.io/severity: high
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    - apiGroups: ["batch"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["jobs", "cronjobs"]
+
+  validations:
+  # ============================================
+  # Pod Security - Baseline Level
+  # ============================================
+
+  # 1. Disallow privileged containers
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      !object.spec.template.spec.containers.exists(c,
+        has(c.securityContext) &&
+        has(c.securityContext.privileged) &&
+        c.securityContext.privileged == true
+      )
+    message: "Privileged containers are not allowed"
+    reason: Forbidden
+
+  # Also check init containers
+  - expression: |
+      !has(object.spec.template.spec.initContainers) ||
+      !object.spec.template.spec.initContainers.exists(c,
+        has(c.securityContext) &&
+        has(c.securityContext.privileged) &&
+        c.securityContext.privileged == true
+      )
+    message: "Privileged init containers are not allowed"
+    reason: Forbidden
+
+  # 2. Disallow hostNetwork
+  - expression: |
+      !has(object.spec.template.spec.hostNetwork) ||
+      object.spec.template.spec.hostNetwork == false
+    message: "hostNetwork is not allowed for security reasons"
+    reason: Forbidden
+
+  # 3. Disallow hostPID
+  - expression: |
+      !has(object.spec.template.spec.hostPID) ||
+      object.spec.template.spec.hostPID == false
+    message: "hostPID is not allowed for security reasons"
+    reason: Forbidden
+
+  # 4. Disallow hostIPC
+  - expression: |
+      !has(object.spec.template.spec.hostIPC) ||
+      object.spec.template.spec.hostIPC == false
+    message: "hostIPC is not allowed for security reasons"
+    reason: Forbidden
+
+  # 5. Disallow hostPath volumes
+  - expression: |
+      !has(object.spec.template.spec.volumes) ||
+      object.spec.template.spec.volumes.all(v, !has(v.hostPath))
+    message: "hostPath volumes are not allowed for security reasons"
+    reason: Forbidden
+
+  # 6. Restrict host ports
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.ports) ||
+        c.ports.all(p, !has(p.hostPort) || p.hostPort == 0)
+      )
+    message: "Host ports are not allowed"
+    reason: Forbidden
+
+  # 7. Disallow privilege escalation
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.securityContext) ||
+        !has(c.securityContext.allowPrivilegeEscalation) ||
+        c.securityContext.allowPrivilegeEscalation == false
+      )
+    message: "Privilege escalation must be disabled (allowPrivilegeEscalation: false)"
+    reason: Forbidden
+
+  # ============================================
+  # Container Image Security
+  # ============================================
+
+  # 8. Disallow latest tag
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        c.image.contains(':') && !c.image.endsWith(':latest')
+      )
+    message: "Container images must use specific version tags, not 'latest'"
+    messageExpression: |
+      'Container using :latest tag: ' +
+      object.spec.template.spec.containers.filter(c,
+        !c.image.contains(':') || c.image.endsWith(':latest')
+      ).map(c, c.name + ' (' + c.image + ')').join(', ')
+    reason: Invalid
+
+  # 9. Require image pull policy
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.imagePullPolicy) &&
+        c.imagePullPolicy in ['Always', 'IfNotPresent', 'Never']
+      )
+    message: "imagePullPolicy must be explicitly set to Always, IfNotPresent, or Never"
+    reason: Invalid
+
+  # ============================================
+  # Resource Management
+  # ============================================
+
+  # 10. Require resource requests and limits
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.cpu) &&
+        has(c.resources.requests.memory) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.cpu) &&
+        has(c.resources.limits.memory)
+      )
+    message: "All containers must specify CPU and memory requests and limits"
+    messageExpression: |
+      'Containers missing resource specifications: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.resources) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.limits)
+      ).map(c, c.name).join(', ')
+    reason: Invalid
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: security-baseline-binding
+spec:
+  policyName: security-baseline.policies.example.com
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+      # Exclude system namespaces
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+    objectSelector:
+      matchExpressions:
+      # Allow exemptions via label
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+# Example: Binding for audit mode (use this first to test)
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: security-baseline-audit
+spec:
+  policyName: security-baseline.policies.example.com
+  validationActions: [Audit, Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        security-audit: enabled

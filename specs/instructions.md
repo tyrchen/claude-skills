@@ -26,3 +26,11 @@ The skill shall:
 ## improve the skill
 
 Current SKILL.md is too simple to capture the core design language of the website. Improve the skill to capture the core design language including the color scheme, fonts, animations, hover / shadow effects etc. Use playwright to play with the url and explore its UI/UX patterns that others could understand and replicate the design. Allow codex to have a maximum 15 minutes to complete the task. Write the complete review doc at ./specs/layer1/0002-codex-review.md
+
+## improve codex skill
+
+for codex-code-review skill, make sure it always do proper web search to avoid false postive. e.g. after review it claim latest version of argocd is 2.x, no 3.x but the latest argocd is 3.2.x (3.3.0 is in rc). also make sure when calling codex headless, all necessary permission is granted.
+
+## build CEL skill
+
+Explore claude code skill from official documentation and examples. Think ultra hard and build a claude skill under ./cel that could write solid, high quality, production ready CEL code for kubernetes. Search and look into CEL documentation and examples to understand the CEL language and the best practices and how to write solid, high quality, production ready CEL code for kubernetes.

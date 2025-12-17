@@ -1,0 +1,216 @@
+# Security Restricted ValidatingAdmissionPolicy
+# Implements Pod Security Standards - Restricted level
+# For high-security environments
+# Compatible with Kubernetes 1.30+
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: security-restricted.policies.example.com
+  labels:
+    policy.kubernetes.io/category: security
+    policy.kubernetes.io/severity: critical
+    policy.kubernetes.io/pss-level: restricted
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    - apiGroups: ["batch"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["jobs", "cronjobs"]
+
+  validations:
+  # ============================================
+  # Pod Security - Restricted Level
+  # ============================================
+
+  # 1. Require non-root user at pod level
+  - expression: |
+      has(object.spec.template.spec.securityContext) &&
+      has(object.spec.template.spec.securityContext.runAsNonRoot) &&
+      object.spec.template.spec.securityContext.runAsNonRoot == true
+    message: "Pod must run as non-root (spec.template.spec.securityContext.runAsNonRoot: true)"
+    reason: Forbidden
+
+  # 2. Require specific non-root runAsUser
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.securityContext) ||
+        !has(c.securityContext.runAsUser) ||
+        c.securityContext.runAsUser >= 1000
+      )
+    message: "Container runAsUser must be >= 1000 (non-root UID)"
+    reason: Forbidden
+
+  # 3. Drop ALL capabilities
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.securityContext) &&
+        has(c.securityContext.capabilities) &&
+        has(c.securityContext.capabilities.drop) &&
+        c.securityContext.capabilities.drop.exists(cap, cap == 'ALL')
+      )
+    message: "All containers must drop ALL capabilities"
+    messageExpression: |
+      'Containers not dropping ALL capabilities: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.securityContext) ||
+        !has(c.securityContext.capabilities) ||
+        !has(c.securityContext.capabilities.drop) ||
+        !c.securityContext.capabilities.drop.exists(cap, cap == 'ALL')
+      ).map(c, c.name).join(', ')
+    reason: Forbidden
+
+  # 4. Restrict capability additions to NET_BIND_SERVICE only
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.securityContext) ||
+        !has(c.securityContext.capabilities) ||
+        !has(c.securityContext.capabilities.add) ||
+        c.securityContext.capabilities.add.all(cap, cap == 'NET_BIND_SERVICE')
+      )
+    message: "Only NET_BIND_SERVICE capability can be added"
+    reason: Forbidden
+
+  # 5. Require read-only root filesystem
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.securityContext) &&
+        has(c.securityContext.readOnlyRootFilesystem) &&
+        c.securityContext.readOnlyRootFilesystem == true
+      )
+    message: "All containers must use read-only root filesystem"
+    messageExpression: |
+      'Containers without read-only root filesystem: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.securityContext) ||
+        !has(c.securityContext.readOnlyRootFilesystem) ||
+        c.securityContext.readOnlyRootFilesystem != true
+      ).map(c, c.name).join(', ')
+    reason: Forbidden
+
+  # 6. Disallow privilege escalation
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.securityContext) &&
+        has(c.securityContext.allowPrivilegeEscalation) &&
+        c.securityContext.allowPrivilegeEscalation == false
+      )
+    message: "allowPrivilegeEscalation must be explicitly set to false"
+    reason: Forbidden
+
+  # 7. Require RuntimeDefault or Localhost seccomp profile
+  - expression: |
+      has(object.spec.template.spec.securityContext) &&
+      has(object.spec.template.spec.securityContext.seccompProfile) &&
+      object.spec.template.spec.securityContext.seccompProfile.type in ['RuntimeDefault', 'Localhost']
+    message: "Pod must use RuntimeDefault or Localhost seccomp profile"
+    reason: Forbidden
+
+  # 8. Restrict volume types
+  - expression: |
+      !has(object.spec.template.spec.volumes) ||
+      object.spec.template.spec.volumes.all(v,
+        has(v.configMap) ||
+        has(v.secret) ||
+        has(v.emptyDir) ||
+        has(v.persistentVolumeClaim) ||
+        has(v.projected) ||
+        has(v.downwardAPI) ||
+        has(v.csi)
+      )
+    message: "Only configMap, secret, emptyDir, PVC, projected, downwardAPI, and CSI volumes are allowed"
+    reason: Forbidden
+
+  # ============================================
+  # Additional Hardening
+  # ============================================
+
+  # 9. Require service account token not auto-mounted
+  - expression: |
+      has(object.spec.template.spec.automountServiceAccountToken) &&
+      object.spec.template.spec.automountServiceAccountToken == false
+    message: "Service account token should not be auto-mounted (set automountServiceAccountToken: false)"
+    reason: Invalid
+
+  # 10. All containers must have probes
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.livenessProbe) && has(c.readinessProbe)
+      )
+    message: "All containers must have liveness and readiness probes"
+    reason: Invalid
+
+  # 11. Disallow default service account
+  - expression: |
+      !has(object.spec.template.spec.serviceAccountName) ||
+      object.spec.template.spec.serviceAccountName != 'default'
+    message: "Using the 'default' service account is not allowed"
+    reason: Forbidden
+
+  # 12. Require runAsGroup for proper GID control
+  - expression: |
+      has(object.spec.template.spec.securityContext) &&
+      has(object.spec.template.spec.securityContext.runAsGroup) &&
+      object.spec.template.spec.securityContext.runAsGroup >= 1000
+    message: "Pod must specify runAsGroup >= 1000"
+    reason: Forbidden
+
+  # 13. Require fsGroup for volume permissions
+  - expression: |
+      !has(object.spec.template.spec.volumes) ||
+      object.spec.template.spec.volumes.all(v, has(v.emptyDir) || has(v.projected) || has(v.downwardAPI)) ||
+      (
+        has(object.spec.template.spec.securityContext) &&
+        has(object.spec.template.spec.securityContext.fsGroup) &&
+        object.spec.template.spec.securityContext.fsGroup >= 1000
+      )
+    message: "Pod must specify fsGroup >= 1000 when using persistent volumes"
+    reason: Invalid
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: security-restricted-binding
+spec:
+  policyName: security-restricted.policies.example.com
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        pod-security.kubernetes.io/enforce: restricted
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+# Audit-only binding for testing
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: security-restricted-audit
+spec:
+  policyName: security-restricted.policies.example.com
+  validationActions: [Audit, Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        security-restricted-audit: enabled

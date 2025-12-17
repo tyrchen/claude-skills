@@ -1,0 +1,352 @@
+# Resource Requirements ValidatingAdmissionPolicy
+# Enforces resource requests, limits, and quotas
+# Compatible with Kubernetes 1.30+
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: resource-requirements.policies.example.com
+  labels:
+    policy.kubernetes.io/category: resource-management
+    policy.kubernetes.io/severity: medium
+spec:
+  failurePolicy: Fail
+
+  # Use ConfigMap for quota configuration
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "statefulsets", "daemonsets"]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    - apiGroups: ["batch"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["jobs", "cronjobs"]
+
+  validations:
+  # ============================================
+  # Required Resource Specifications
+  # ============================================
+
+  # 1. Require CPU requests
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.cpu)
+      )
+    message: "All containers must specify CPU requests"
+    messageExpression: |
+      'Containers missing CPU requests: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.resources) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.requests.cpu)
+      ).map(c, c.name).join(', ')
+    reason: Invalid
+
+  # 2. Require memory requests
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.memory)
+      )
+    message: "All containers must specify memory requests"
+    messageExpression: |
+      'Containers missing memory requests: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.resources) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.requests.memory)
+      ).map(c, c.name).join(', ')
+    reason: Invalid
+
+  # 3. Require CPU limits
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.cpu)
+      )
+    message: "All containers must specify CPU limits"
+    messageExpression: |
+      'Containers missing CPU limits: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.limits.cpu)
+      ).map(c, c.name).join(', ')
+    reason: Invalid
+
+  # 4. Require memory limits
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.memory)
+      )
+    message: "All containers must specify memory limits"
+    messageExpression: |
+      'Containers missing memory limits: ' +
+      object.spec.template.spec.containers.filter(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.limits.memory)
+      ).map(c, c.name).join(', ')
+    reason: Invalid
+
+  # ============================================
+  # Resource Quota Enforcement
+  # ============================================
+
+  # 5. Maximum CPU limit per container
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.limits.cpu) ||
+        quantity(c.resources.limits.cpu) <= quantity(params.data.maxCpuLimit)
+      )
+    message: "Container CPU limit exceeds maximum allowed"
+    messageExpression: |
+      'Container CPU limit exceeds ' + params.data.maxCpuLimit + ': ' +
+      object.spec.template.spec.containers.filter(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.cpu) &&
+        quantity(c.resources.limits.cpu) > quantity(params.data.maxCpuLimit)
+      ).map(c, c.name + '=' + c.resources.limits.cpu).join(', ')
+    reason: Invalid
+
+  # 6. Maximum memory limit per container
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.limits.memory) ||
+        quantity(c.resources.limits.memory) <= quantity(params.data.maxMemoryLimit)
+      )
+    message: "Container memory limit exceeds maximum allowed"
+    messageExpression: |
+      'Container memory limit exceeds ' + params.data.maxMemoryLimit + ': ' +
+      object.spec.template.spec.containers.filter(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.memory) &&
+        quantity(c.resources.limits.memory) > quantity(params.data.maxMemoryLimit)
+      ).map(c, c.name + '=' + c.resources.limits.memory).join(', ')
+    reason: Invalid
+
+  # 7. Minimum CPU request (prevent overly small requests)
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.requests.cpu) ||
+        quantity(c.resources.requests.cpu) >= quantity(params.data.minCpuRequest)
+      )
+    message: "Container CPU request is below minimum"
+    messageExpression: |
+      'Container CPU request below ' + params.data.minCpuRequest + ': ' +
+      object.spec.template.spec.containers.filter(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.cpu) &&
+        quantity(c.resources.requests.cpu) < quantity(params.data.minCpuRequest)
+      ).map(c, c.name + '=' + c.resources.requests.cpu).join(', ')
+    reason: Invalid
+
+  # 8. Minimum memory request
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.requests.memory) ||
+        quantity(c.resources.requests.memory) >= quantity(params.data.minMemoryRequest)
+      )
+    message: "Container memory request is below minimum"
+    messageExpression: |
+      'Container memory request below ' + params.data.minMemoryRequest + ': ' +
+      object.spec.template.spec.containers.filter(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.memory) &&
+        quantity(c.resources.requests.memory) < quantity(params.data.minMemoryRequest)
+      ).map(c, c.name + '=' + c.resources.requests.memory).join(', ')
+    reason: Invalid
+
+  # ============================================
+  # Resource Ratio Validation
+  # ============================================
+
+  # 9. Limits must be >= requests
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.requests) ||
+        (
+          (!has(c.resources.limits.cpu) || !has(c.resources.requests.cpu) ||
+           quantity(c.resources.limits.cpu) >= quantity(c.resources.requests.cpu)) &&
+          (!has(c.resources.limits.memory) || !has(c.resources.requests.memory) ||
+           quantity(c.resources.limits.memory) >= quantity(c.resources.requests.memory))
+        )
+      )
+    message: "Resource limits must be greater than or equal to requests"
+    reason: Invalid
+
+  # 10. CPU limit/request ratio (prevent excessive burstability)
+  - expression: |
+      !has(params.data.maxCpuRatio) ||
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.limits.cpu) ||
+        !has(c.resources.requests.cpu) ||
+        double(quantity(c.resources.limits.cpu)) / double(quantity(c.resources.requests.cpu)) <= double(params.data.maxCpuRatio)
+      )
+    message: "CPU limit to request ratio exceeds maximum allowed"
+    messageExpression: |
+      'CPU limit/request ratio exceeds ' + params.data.maxCpuRatio + 'x'
+    reason: Invalid
+
+  # 11. Memory limit/request ratio
+  - expression: |
+      !has(params.data.maxMemoryRatio) ||
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        !has(c.resources) ||
+        !has(c.resources.limits) ||
+        !has(c.resources.requests) ||
+        !has(c.resources.limits.memory) ||
+        !has(c.resources.requests.memory) ||
+        double(quantity(c.resources.limits.memory)) / double(quantity(c.resources.requests.memory)) <= double(params.data.maxMemoryRatio)
+      )
+    message: "Memory limit to request ratio exceeds maximum allowed"
+    messageExpression: |
+      'Memory limit/request ratio exceeds ' + params.data.maxMemoryRatio + 'x'
+    reason: Invalid
+
+  # ============================================
+  # Replica Constraints
+  # ============================================
+
+  # 12. Minimum replicas
+  - expression: |
+      !has(params.data.minReplicas) ||
+      !has(object.spec.replicas) ||
+      object.spec.replicas >= int(params.data.minReplicas)
+    message: "Number of replicas is below minimum required"
+    messageExpression: |
+      'Replicas ' + string(object.spec.replicas) + ' below minimum ' + params.data.minReplicas
+    reason: Invalid
+
+  # 13. Maximum replicas
+  - expression: |
+      !has(params.data.maxReplicas) ||
+      !has(object.spec.replicas) ||
+      object.spec.replicas <= int(params.data.maxReplicas)
+    message: "Number of replicas exceeds maximum allowed"
+    messageExpression: |
+      'Replicas ' + string(object.spec.replicas) + ' exceeds maximum ' + params.data.maxReplicas
+    reason: Invalid
+
+---
+# Default parameters for development
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resource-requirements-params-dev
+  namespace: default
+data:
+  # Maximum limits
+  maxCpuLimit: "4"
+  maxMemoryLimit: "8Gi"
+  # Minimum requests
+  minCpuRequest: "10m"
+  minMemoryRequest: "32Mi"
+  # Ratios (optional)
+  maxCpuRatio: "10"
+  maxMemoryRatio: "2"
+  # Replica constraints
+  minReplicas: "1"
+  maxReplicas: "50"
+
+---
+# Stricter parameters for production
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resource-requirements-params-prod
+  namespace: default
+data:
+  maxCpuLimit: "2"
+  maxMemoryLimit: "4Gi"
+  minCpuRequest: "100m"
+  minMemoryRequest: "128Mi"
+  maxCpuRatio: "2"
+  maxMemoryRatio: "1.5"
+  minReplicas: "2"
+  maxReplicas: "20"
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: resource-requirements-binding-dev
+spec:
+  policyName: resource-requirements.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: resource-requirements-params-dev
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        environment: development
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: resource-requirements-binding-prod
+spec:
+  policyName: resource-requirements.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: resource-requirements-params-prod
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        environment: production
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist

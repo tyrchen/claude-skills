@@ -1,0 +1,300 @@
+# Labeling Standards ValidatingAdmissionPolicy
+# Enforces organizational labeling conventions
+# Compatible with Kubernetes 1.30+
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: labeling-standards.policies.example.com
+  labels:
+    policy.kubernetes.io/category: governance
+    policy.kubernetes.io/severity: medium
+spec:
+  failurePolicy: Fail
+
+  # Parameters for configurable label requirements
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+
+  matchConstraints:
+    resourceRules:
+    # Deployments and workloads
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    # Core resources
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods", "services", "configmaps", "secrets", "persistentvolumeclaims"]
+    # Batch resources
+    - apiGroups: ["batch"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["jobs", "cronjobs"]
+    # Networking
+    - apiGroups: ["networking.k8s.io"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["ingresses", "networkpolicies"]
+
+  validations:
+  # ============================================
+  # Required Standard Labels
+  # ============================================
+
+  # 1. Require app.kubernetes.io/name
+  - expression: |
+      has(object.metadata.labels) &&
+      'app.kubernetes.io/name' in object.metadata.labels &&
+      object.metadata.labels['app.kubernetes.io/name'].size() > 0
+    message: "Resource must have 'app.kubernetes.io/name' label"
+    reason: Invalid
+
+  # 2. Require app.kubernetes.io/version
+  - expression: |
+      has(object.metadata.labels) &&
+      'app.kubernetes.io/version' in object.metadata.labels &&
+      object.metadata.labels['app.kubernetes.io/version'].size() > 0
+    message: "Resource must have 'app.kubernetes.io/version' label"
+    reason: Invalid
+
+  # 3. Require app.kubernetes.io/component
+  - expression: |
+      has(object.metadata.labels) &&
+      'app.kubernetes.io/component' in object.metadata.labels &&
+      object.metadata.labels['app.kubernetes.io/component'].size() > 0
+    message: "Resource must have 'app.kubernetes.io/component' label"
+    reason: Invalid
+
+  # 4. Require app.kubernetes.io/managed-by
+  - expression: |
+      has(object.metadata.labels) &&
+      'app.kubernetes.io/managed-by' in object.metadata.labels &&
+      object.metadata.labels['app.kubernetes.io/managed-by'].size() > 0
+    message: "Resource must have 'app.kubernetes.io/managed-by' label"
+    reason: Invalid
+
+  # ============================================
+  # Organizational Labels
+  # ============================================
+
+  # 5. Require team label
+  - expression: |
+      has(object.metadata.labels) &&
+      'team' in object.metadata.labels &&
+      object.metadata.labels['team'].size() > 0
+    message: "Resource must have 'team' label"
+    reason: Invalid
+
+  # 6. Require environment label with valid value
+  - expression: |
+      has(object.metadata.labels) &&
+      'environment' in object.metadata.labels &&
+      object.metadata.labels['environment'] in ['dev', 'development', 'staging', 'uat', 'prod', 'production']
+    message: "Resource must have 'environment' label with valid value (dev, staging, uat, prod)"
+    reason: Invalid
+
+  # 7. Require cost-center label (for billing)
+  - expression: |
+      !has(params.data.requireCostCenter) ||
+      params.data.requireCostCenter != 'true' ||
+      (
+        has(object.metadata.labels) &&
+        'cost-center' in object.metadata.labels &&
+        object.metadata.labels['cost-center'].matches('^[A-Z]{2,4}-[0-9]{3,6}$')
+      )
+    message: "Resource must have 'cost-center' label in format XX-123 or XXXX-123456"
+    reason: Invalid
+
+  # ============================================
+  # Required Annotations
+  # ============================================
+
+  # 8. Require owner annotation with email
+  - expression: |
+      has(object.metadata.annotations) &&
+      'owner' in object.metadata.annotations &&
+      object.metadata.annotations['owner'].matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')
+    message: "Resource must have 'owner' annotation with valid email address"
+    reason: Invalid
+
+  # 9. Require description annotation
+  - expression: |
+      !has(params.data.requireDescription) ||
+      params.data.requireDescription != 'true' ||
+      (
+        has(object.metadata.annotations) &&
+        'description' in object.metadata.annotations &&
+        object.metadata.annotations['description'].size() >= 10
+      )
+    message: "Resource must have 'description' annotation (min 10 characters)"
+    reason: Invalid
+
+  # 10. Require documentation link
+  - expression: |
+      !has(params.data.requireDocs) ||
+      params.data.requireDocs != 'true' ||
+      (
+        has(object.metadata.annotations) &&
+        'documentation' in object.metadata.annotations &&
+        (
+          object.metadata.annotations['documentation'].startsWith('https://') ||
+          object.metadata.annotations['documentation'].startsWith('http://')
+        )
+      )
+    message: "Resource must have 'documentation' annotation with valid URL"
+    reason: Invalid
+
+  # ============================================
+  # Label Format Validation
+  # ============================================
+
+  # 11. Validate label key format
+  - expression: |
+      !has(object.metadata.labels) ||
+      object.metadata.labels.all(k, v,
+        k.size() <= 253 &&
+        (
+          !k.contains('/') ||
+          (
+            k.split('/').size() == 2 &&
+            k.split('/')[0].size() <= 253 &&
+            k.split('/')[1].size() <= 63
+          )
+        )
+      )
+    message: "Label keys must follow Kubernetes naming conventions (max 253 chars for prefix, 63 for name)"
+    reason: Invalid
+
+  # 12. Validate label value format
+  - expression: |
+      !has(object.metadata.labels) ||
+      object.metadata.labels.all(k, v,
+        v.size() <= 63 &&
+        (
+          v.size() == 0 ||
+          v.matches('^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$')
+        )
+      )
+    message: "Label values must be <= 63 characters and follow format: alphanumeric with ._- allowed"
+    reason: Invalid
+
+  # 13. Validate annotation value size
+  - expression: |
+      !has(object.metadata.annotations) ||
+      object.metadata.annotations.all(k, v, v.size() <= 262144)
+    message: "Annotation values must be <= 256KB"
+    reason: Invalid
+
+  # ============================================
+  # Naming Convention Validation
+  # ============================================
+
+  # 14. Resource name must follow DNS-1123 subdomain
+  - expression: |
+      object.metadata.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') &&
+      object.metadata.name.size() <= 63
+    message: "Resource name must be lowercase alphanumeric with hyphens, max 63 characters"
+    reason: Invalid
+
+  # 15. Name must match team prefix (optional)
+  - expression: |
+      !has(params.data.requireTeamPrefix) ||
+      params.data.requireTeamPrefix != 'true' ||
+      !has(object.metadata.labels) ||
+      !('team' in object.metadata.labels) ||
+      object.metadata.name.startsWith(object.metadata.labels['team'] + '-')
+    message: "Resource name must start with team label value as prefix"
+    reason: Invalid
+
+---
+# Default parameters
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: labeling-standards-params
+  namespace: default
+data:
+  requireCostCenter: "false"
+  requireDescription: "true"
+  requireDocs: "false"
+  requireTeamPrefix: "false"
+
+---
+# Production parameters (stricter)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: labeling-standards-params-prod
+  namespace: default
+data:
+  requireCostCenter: "true"
+  requireDescription: "true"
+  requireDocs: "true"
+  requireTeamPrefix: "false"
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: labeling-standards-binding
+spec:
+  policyName: labeling-standards.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: labeling-standards-params
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: labeling-standards-binding-prod
+spec:
+  policyName: labeling-standards.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: labeling-standards-params-prod
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        environment: production
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+# Audit binding for gradual rollout
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: labeling-standards-audit
+spec:
+  policyName: labeling-standards.policies.example.com
+  validationActions: [Audit, Warn]
+  paramRef:
+    name: labeling-standards-params
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        labeling-audit: enabled

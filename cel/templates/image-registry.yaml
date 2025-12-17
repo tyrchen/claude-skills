@@ -1,0 +1,197 @@
+# Image Registry Restriction ValidatingAdmissionPolicy
+# Ensures containers only pull images from approved registries
+# Compatible with Kubernetes 1.30+
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: image-registry.policies.example.com
+  labels:
+    policy.kubernetes.io/category: supply-chain
+    policy.kubernetes.io/severity: high
+spec:
+  failurePolicy: Fail
+
+  # Use ConfigMap for registry configuration
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    - apiGroups: ["batch"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["jobs", "cronjobs"]
+
+  validations:
+  # ============================================
+  # Main Container Image Validation
+  # ============================================
+
+  # 1. All containers must use approved registries
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        params.data.allowedRegistries.split(',').exists(r,
+          c.image.startsWith(r.trim())
+        )
+      )
+    message: "Container images must come from approved registries"
+    messageExpression: |
+      'Unapproved image(s): ' +
+      object.spec.template.spec.containers.filter(c,
+        !params.data.allowedRegistries.split(',').exists(r,
+          c.image.startsWith(r.trim())
+        )
+      ).map(c, c.name + '=' + c.image).join(', ') +
+      '. Allowed: ' + params.data.allowedRegistries
+    reason: Forbidden
+
+  # 2. Init containers must also use approved registries
+  - expression: |
+      !has(object.spec.template.spec.initContainers) ||
+      object.spec.template.spec.initContainers.all(c,
+        params.data.allowedRegistries.split(',').exists(r,
+          c.image.startsWith(r.trim())
+        )
+      )
+    message: "Init container images must come from approved registries"
+    messageExpression: |
+      'Unapproved init container image(s): ' +
+      object.spec.template.spec.initContainers.filter(c,
+        !params.data.allowedRegistries.split(',').exists(r,
+          c.image.startsWith(r.trim())
+        )
+      ).map(c, c.name + '=' + c.image).join(', ')
+    reason: Forbidden
+
+  # ============================================
+  # Image Tag Validation
+  # ============================================
+
+  # 3. Disallow 'latest' tag
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        c.image.contains(':') && !c.image.endsWith(':latest')
+      )
+    message: "Container images must not use ':latest' tag"
+    messageExpression: |
+      'Images using :latest: ' +
+      object.spec.template.spec.containers.filter(c,
+        !c.image.contains(':') || c.image.endsWith(':latest')
+      ).map(c, c.image).join(', ')
+    reason: Invalid
+
+  # 4. Require tag to be present (no implicit :latest)
+  - expression: |
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        c.image.contains(':') || c.image.contains('@sha256:')
+      )
+    message: "Container images must specify an explicit tag or digest"
+    reason: Invalid
+
+  # ============================================
+  # Optional: Stricter Controls
+  # ============================================
+
+  # 5. Require semver tags (can be enabled via parameter)
+  - expression: |
+      !has(params.data.requireSemver) ||
+      params.data.requireSemver != 'true' ||
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        c.image.contains('@sha256:') ||
+        c.image.split(':')[1].matches('^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$')
+      )
+    message: "Container images must use semantic versioning (e.g., v1.2.3) or digest"
+    reason: Invalid
+
+  # 6. Require image digest (can be enabled via parameter)
+  - expression: |
+      !has(params.data.requireDigest) ||
+      params.data.requireDigest != 'true' ||
+      !has(object.spec.template.spec.containers) ||
+      object.spec.template.spec.containers.all(c,
+        c.image.contains('@sha256:')
+      )
+    message: "Container images must use digest (sha256) reference"
+    reason: Invalid
+
+---
+# ConfigMap for allowed registries
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: image-registry-policy-params
+  namespace: default
+data:
+  # Comma-separated list of allowed registry prefixes
+  allowedRegistries: "gcr.io/myproject/,docker.io/library/,ghcr.io/myorg/"
+  # Optional: require semantic versioning
+  requireSemver: "false"
+  # Optional: require image digest
+  requireDigest: "false"
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: image-registry-binding
+spec:
+  policyName: image-registry.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: image-registry-policy-params
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values:
+        - kube-system
+        - kube-public
+    objectSelector:
+      matchExpressions:
+      - key: policy.kubernetes.io/exempt
+        operator: DoesNotExist
+
+---
+# Production binding with stricter requirements
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: image-registry-policy-params-prod
+  namespace: default
+data:
+  allowedRegistries: "gcr.io/prod-project/"
+  requireSemver: "true"
+  requireDigest: "false"
+
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: image-registry-binding-prod
+spec:
+  policyName: image-registry.policies.example.com
+  validationActions: [Deny]
+  paramRef:
+    name: image-registry-policy-params-prod
+    namespace: default
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        environment: production
