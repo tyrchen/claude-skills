@@ -1,0 +1,256 @@
+//! Custom Resource Definition for {{RESOURCE_KIND}}.
+//!
+//! This module defines the CRD schema for `{{RESOURCE_KIND}}` resources.
+//! Replace {{RESOURCE_KIND}}, {{GROUP}}, {{VERSION}} with your resource details.
+
+use chrono::{DateTime, Utc};
+use kube::CustomResource;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// Custom Resource Definition
+// ============================================================================
+
+/// {{RESOURCE_KIND}} manages [describe what this resource manages].
+///
+/// Example:
+/// ```yaml
+/// apiVersion: {{GROUP}}/{{VERSION}}
+/// kind: {{RESOURCE_KIND}}
+/// metadata:
+///   name: my-resource
+///   namespace: my-namespace
+/// spec:
+///   # Spec fields here
+/// ```
+#[derive(CustomResource, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[kube(
+    group = "{{GROUP}}",
+    version = "{{VERSION}}",
+    kind = "{{RESOURCE_KIND}}",
+    namespaced,
+    status = "{{RESOURCE_KIND}}Status",
+    shortname = "{{SHORT_NAME}}",
+    printcolumn = r#"{"name":"Ready","type":"string","jsonPath":".status.ready"}"#,
+    printcolumn = r#"{"name":"Age","type":"date","jsonPath":".metadata.creationTimestamp"}"#
+)]
+#[serde(rename_all = "camelCase")]
+pub struct {{RESOURCE_KIND}}Spec {
+    /// Primary identifier for the resource.
+    pub name: String,
+
+    /// Reference to another resource (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference: Option<ResourceReference>,
+
+    /// Configuration options.
+    #[serde(default)]
+    pub config: ResourceConfig,
+
+    // Add more spec fields as needed
+}
+
+// ============================================================================
+// Spec Types
+// ============================================================================
+
+/// Reference to another Kubernetes resource.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceReference {
+    /// Name of the referenced resource.
+    pub name: String,
+
+    /// Namespace of the referenced resource. Defaults to same namespace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+
+    /// Kind of the referenced resource.
+    #[serde(default = "ResourceReference::default_kind")]
+    pub kind: String,
+}
+
+impl ResourceReference {
+    fn default_kind() -> String {
+        "DefaultKind".to_string()
+    }
+}
+
+/// Configuration options for the resource.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceConfig {
+    /// Enable feature X.
+    #[serde(default)]
+    pub enable_feature_x: bool,
+
+    /// TTL in seconds.
+    #[serde(default = "ResourceConfig::default_ttl")]
+    pub ttl: i64,
+}
+
+impl ResourceConfig {
+    fn default_ttl() -> i64 {
+        300
+    }
+}
+
+// ============================================================================
+// Status Types
+// ============================================================================
+
+/// Status of a {{RESOURCE_KIND}} resource.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct {{RESOURCE_KIND}}Status {
+    /// Whether all resources are ready.
+    #[serde(default)]
+    pub ready: bool,
+
+    /// Conditions representing the resource state.
+    #[serde(default)]
+    pub conditions: Vec<Condition>,
+
+    /// The generation last observed by the controller.
+    #[serde(default)]
+    pub observed_generation: i64,
+
+    /// AWS ARN of the created resource (if applicable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arn: Option<String>,
+
+    /// Endpoint URL (if applicable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+
+    /// Names of created child resources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_resources: Option<CreatedResources>,
+}
+
+/// Condition represents the status of a particular aspect of the resource.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Condition {
+    /// Type of the condition (e.g., "Ready", "Progressing").
+    #[serde(rename = "type")]
+    pub type_: String,
+
+    /// Status of the condition: "True", "False", or "Unknown".
+    pub status: String,
+
+    /// Machine-readable reason for the condition's last transition.
+    pub reason: String,
+
+    /// Human-readable message explaining the condition.
+    pub message: String,
+
+    /// Last time the condition transitioned.
+    pub last_transition_time: DateTime<Utc>,
+
+    /// Generation observed when this condition was set.
+    #[serde(default)]
+    pub observed_generation: i64,
+}
+
+impl Condition {
+    /// Creates a new condition.
+    pub fn new<S: Into<String>>(
+        type_: &str,
+        status: &str,
+        reason: &str,
+        message: S,
+        generation: i64,
+    ) -> Self {
+        Self {
+            type_: type_.to_string(),
+            status: status.to_string(),
+            reason: reason.to_string(),
+            message: message.into(),
+            last_transition_time: Utc::now(),
+            observed_generation: generation,
+        }
+    }
+}
+
+/// Tracks created child resources.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedResources {
+    /// Name of the primary ACK resource.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary: Option<String>,
+
+    /// Names of secondary ACK resources.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secondaries: Vec<String>,
+}
+
+// ============================================================================
+// Condition Type Constants
+// ============================================================================
+
+/// Standard condition types for {{RESOURCE_KIND}}.
+pub mod condition_types {
+    /// Overall readiness condition.
+    pub const READY: &str = "Ready";
+
+    /// Resource is degraded but functional.
+    pub const DEGRADED: &str = "Degraded";
+
+    /// Primary resource is ready.
+    pub const PRIMARY_READY: &str = "PrimaryReady";
+
+    /// All secondary resources are ready.
+    pub const SECONDARIES_READY: &str = "SecondariesReady";
+
+    // Add more condition types as needed
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Sanitizes a string for use in Kubernetes resource names.
+/// Replaces dots with dashes, removes invalid characters, converts to lowercase.
+pub fn sanitize_for_name(s: &str) -> String {
+    s.to_lowercase()
+        .replace('.', "-")
+        .replace('*', "wildcard")
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_for_name() {
+        assert_eq!(sanitize_for_name("api.example.com"), "api-example-com");
+        assert_eq!(sanitize_for_name("*.example.com"), "wildcard-example-com");
+        assert_eq!(sanitize_for_name("Test_Resource"), "testresource");
+    }
+
+    #[test]
+    fn test_condition_new() {
+        let cond = Condition::new("Ready", "True", "AllReady", "All resources ready", 1);
+        assert_eq!(cond.type_, "Ready");
+        assert_eq!(cond.status, "True");
+        assert_eq!(cond.reason, "AllReady");
+        assert_eq!(cond.observed_generation, 1);
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = ResourceConfig::default();
+        assert!(!config.enable_feature_x);
+        assert_eq!(config.ttl, 300);
+    }
+}
