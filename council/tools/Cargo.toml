@@ -1,0 +1,10 @@
+[package]
+name = "council"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tools for Council skill - advisor distillation and quality validation"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+unicode-width = "0.2"
