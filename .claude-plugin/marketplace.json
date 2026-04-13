@@ -11,11 +11,18 @@
   "plugins": [
     {
       "name": "tchen-skills",
-      "description": "Tian Chen-specific skills",
+      "description": "Tian Chen-specific skills: AI image generation, CEL/K8s policies, chat history extraction, code review, council advisors, design guide extraction, KRO/Pulumi resources, and SurrealDB queries",
       "source": "./",
       "strict": false,
       "skills": [
-        "./ai-image"
+        "./ai-image",
+        "./cel",
+        "./chat-history",
+        "./codex-code-review",
+        "./council",
+        "./design-guide",
+        "./kro-rgd",
+        "./surrealdb"
       ]
     }
   ]
