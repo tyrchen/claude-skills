@@ -44,6 +44,7 @@ Council是一个**Advisor管理系统**，做三件事：
 ```
 council/
 ├── SKILL.md              # 本文件：路由、管理、协议
+├── advisors.md           # Advisor注册表（自动维护，勿手动编辑）
 ├── personas/             # 所有Advisor persona
 │   ├── steve-jobs/
 │   │   ├── persona.md    # 蒸馏后的思维框架
@@ -99,7 +100,7 @@ council/
 
 **Step 2: 候选推荐**（2-3个候选）
 
-- **来源A**：扫描 `personas/` 的已有Advisor（即插即用，零成本）
+- **来源A**：读取 `advisors.md` 匹配已有Advisor（即插即用，零成本）
 - **来源B**：新蒸馏候选，匹配需求维度
 
 每个候选展示：核心镜片 + 为什么适合 + 局限。不超过3个候选。
@@ -288,6 +289,33 @@ Phase 4通过后自动启动：
 
 ---
 
+### Phase 6: 更新Advisor注册表
+
+**蒸馏完成后自动执行，无需用户确认。**
+
+读取刚写入的 `personas/[person-name]/persona.md` 元数据头和心智模型section，在 `advisors.md` 中追加或更新该Advisor的条目。
+
+每个条目包含以下字段（一行表格行）：
+
+| 字段 | 来源 |
+|------|------|
+| # | 自增序号 |
+| Advisor | persona.md → `name` |
+| 别名 | persona.md → `aliases` |
+| 领域 | persona.md → `domain` |
+| 一句话简介 | 根据心智模型概括，一句话描述此人的核心思维方式 |
+| 核心镜片 | persona.md → 所有心智模型名称，顿号分隔 |
+| 适合议题 | 根据领域和心智模型推导，列出3-6个适合咨询的具体议题类型 |
+| 蒸馏时间 | persona.md → `last_updated` |
+
+**规则**：
+- 新蒸馏的Advisor → 追加新行
+- 更新已有Advisor → 覆盖对应行（匹配Advisor名称）
+- 删除Advisor → 移除对应行并重新编号
+- `advisors.md` 是派生数据，persona.md是source of truth
+
+---
+
 ## 路径B: 激活Advisor
 
 当用户说「用XX的视角」「XX会怎么看」「切换到XX」时：
@@ -329,10 +357,10 @@ Phase 4通过后自动启动：
 #### Step 1: 组建圆桌
 
 **自动推荐模式**（用户没指定Advisor）：
-1. 扫描 `personas/` 获取所有已有Advisor
-2. 读取每个 `persona.md` 的元数据头和心智模型section
-3. 匹配问题领域，推荐2-4个Advisor，说明推荐理由
-4. 用户确认参与者名单
+1. **读取 `advisors.md`** 获取所有已就绪Advisor的领域、核心镜片和适合议题
+2. 根据用户问题匹配「适合议题」和「领域」字段，推荐2-4个Advisor，说明推荐理由
+3. 用户确认参与者名单
+4. 确认后再读取对应的 `personas/[name]/persona.md` 加载完整persona
 
 **指定模式**（用户指定了名字）：
 1. 检查对应persona是否存在
@@ -373,18 +401,17 @@ Phase 4通过后自动启动：
 4. 更新persona.md中的「最新动态」和调研时间
 5. 在更新日志中追加新版本记录
 6. 不重写整个persona，只增量更新
+7. **更新 `advisors.md` 中对应条目**（同Phase 6逻辑）
 
 ---
 
 ## 列出已有Advisor
 
-当用户说「有哪些advisor」「council成员」「list personas」时：
+当用户说「有哪些advisor」「council成员」「list personas」「目前有多少advisor」时：
 
-扫描 `personas/` 目录，读取每个 `persona.md` 的元数据头，展示：
+**直接读取 `advisors.md`** 展示完整的Advisor注册表。不需要逐个扫描persona目录。
 
-| Advisor | 领域 | 核心镜片 | 蒸馏时间 |
-|---------|------|---------|---------|
-| [人名] | [领域标签] | [主要心智模型] | [日期] |
+如果 `advisors.md` 不存在或内容明显过时（条目数远少于 `personas/` 目录中的persona.md数量），则触发一次全量重建：扫描所有 `personas/*/persona.md`，重新生成 `advisors.md`。
 
 ---
 
