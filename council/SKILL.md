@@ -27,6 +27,16 @@ Council是一个**Advisor管理系统**，做三件事：
 
 **圆桌**（Council Session）—— 召集多个Advisor围绕一个问题进行结构化辩论。每个Advisor用自己的心智模型独立分析，然后交叉质疑，最终综合为可行动的决策框架。
 
+### 工作目录约束
+
+**蒸馏操作只能在 `claude-skills` 项目目录下执行。** 所有personas数据存储在项目目录的 `council/personas/` 下，而非plugin cache中。
+
+启动蒸馏前，检查当前工作目录：
+- 如果 `pwd` 包含 `claude-skills` → 正常执行
+- 否则 → 提示用户：「蒸馏需要在 claude-skills 项目目录下执行，请先 cd 到该目录。」
+
+**激活和圆桌讨论不受此限制**——可以在任何目录下读取已有persona。
+
 ### 存储架构
 
 所有Advisor以persona文件形式存储在Council的 `personas/` 目录下，**不创建独立的Skill**：
@@ -47,6 +57,8 @@ council/
 ```
 
 **为什么不用独立Skill**：Advisor是数据不是代码。100个Advisor不应该产生100个Skill来污染列表。Council统一管理路由、激活、圆桌讨论。
+
+**路径解析规则**：所有persona路径相对于skill所在目录的 `personas/` 解析。spawn子Agent时，必须传递**绝对路径**给写入目标。
 
 ---
 
@@ -129,7 +141,13 @@ personas/[person-name]/
 完整的Agent任务分配和prompt模板：**读取 `references/agent-prompts.md`**。
 信息源优先级和黑名单：**读取 `references/source-policy.md`**。
 
-可以并行启动多个调研Agent（按人拆分或按维度拆分），每个Agent直接将调研结果写入对应的 `research/0X-xxx.md` 文件。
+可以并行启动多个调研Agent（按人拆分或按维度拆分），**每个Agent必须自行将调研结果写入对应的research文件**。
+
+**Agent写入规则**：
+- 主Agent在spawn子Agent时，必须在prompt中提供**绝对路径**（如 `/Users/xxx/projects/mycode/claude-skills/council/personas/charlie-munger/research/`）
+- 子Agent使用Write工具直接写入6个research文件（01-writings.md 到 06-timeline.md）
+- 主Agent不负责转写——子Agent完成即意味着文件已就绪
+- 子Agent写入前应先用Bash `mkdir -p` 确保目录存在
 
 #### 工具辅助
 
