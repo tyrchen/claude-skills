@@ -6,8 +6,6 @@
 
 调研Agent直接将结果写入 `personas/[name]/research/0X-xxx.md`。
 
-**前提**：用户的settings.json中已预授权 `~/.claude/skills/council/personas/**` 的写入权限。
-
 ## 调研维度总览
 
 | 维度 | 搜索目标 | 提取重点 | 输出文件 | 级别 |
@@ -33,12 +31,11 @@
 
 ## Agent Prompt 模板
 
-每个prompt的**公共尾部**（替换原来的「写入文件」指令）：
+每个prompt的**公共尾部**：
 
 ```
-重要：
-- 不要尝试写文件或使用Write工具。将你的调研结果作为文本直接返回。
-- 主Agent会负责将你的内容写入对应文件。
+输出要求：
+- 将调研结果直接写入对应的research文件。
 - 用markdown格式组织你的输出，以 # [维度名称] 开头。
 ```
 

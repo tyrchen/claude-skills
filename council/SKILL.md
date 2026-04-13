@@ -131,8 +131,6 @@ personas/[person-name]/
 
 可以并行启动多个调研Agent（按人拆分或按维度拆分），每个Agent直接将调研结果写入对应的 `research/0X-xxx.md` 文件。
 
-**前提**：用户的settings.json中已预授权 `~/.claude/skills/council/personas/**` 的写入权限，确保后台Agent可以直接写文件。
-
 #### 工具辅助
 
 - **字幕下载**：`council download-subtitles <YouTube_URL> --output-dir <目录>`
