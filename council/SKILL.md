@@ -129,20 +129,9 @@ personas/[person-name]/
 完整的Agent任务分配和prompt模板：**读取 `references/agent-prompts.md`**。
 信息源优先级和黑名单：**读取 `references/source-policy.md`**。
 
-**⚠️ 关键：主Agent写文件，子Agent只返回内容**
+可以并行启动多个调研Agent（按人拆分或按维度拆分），每个Agent直接将调研结果写入对应的 `research/0X-xxx.md` 文件。
 
-子Agent（后台运行）无法获取用户的文件写入授权。因此：
-- 子Agent的任务是**调研并返回结构化内容**，不写文件
-- 主Agent收到子Agent返回的内容后，**统一写入** `research/0X-xxx.md`
-- 这确保所有文件操作都在主Agent的交互权限下完成
-
-调研Agent的prompt末尾加入：
-```
-重要：不要尝试写文件。将你的调研结果作为文本直接返回。
-主Agent会负责写入文件。
-```
-
-可以并行启动多个调研Agent（按人拆分或按维度拆分），但每个Agent只返回内容。
+**前提**：用户的settings.json中已预授权 `~/.claude/skills/council/personas/**` 的写入权限，确保后台Agent可以直接写文件。
 
 #### 工具辅助
 
